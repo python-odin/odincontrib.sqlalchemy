@@ -40,7 +40,7 @@ setup(
 
     keywords='odin web rest api sqlalchemy',
 
-    packages=find_packages(include=('odincontrib_sqlalchemy',)),
+    packages=find_packages(include=('odincontrib',)),
 
     install_requires=['odin>=0.10', 'six', 'sqlalchemy>=1.1'],
 )
