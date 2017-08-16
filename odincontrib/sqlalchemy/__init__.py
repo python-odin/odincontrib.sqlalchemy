@@ -61,7 +61,7 @@ def field_factory(column):
 
 
 def table_resource_factory(table, module=None, base_resource=odin.Resource, resource_mixins=None, exclude_fields=None,
-                           generate_mappings=True, return_mappings=False, additional_fields=None,
+                           generate_mappings=False, return_mappings=False, additional_fields=None,
                            resource_type_name=None, reverse_exclude_fields=None):
     """
 
@@ -93,7 +93,7 @@ def table_resource_factory(table, module=None, base_resource=odin.Resource, reso
         frame = inspect.stack()[1]
         module = inspect.getmodule(frame[0]).__name__
     elif not isinstance(module, str):
-        module = sys.modules[module]
+        module = module.__name__
 
     # Set defaults
     resource_mixins = resource_mixins or []
@@ -126,13 +126,11 @@ def table_resource_factory(table, module=None, base_resource=odin.Resource, reso
     resource_type = type(resource_type_name, bases, attrs)
 
     # Generate mappings
-    forward_mapping, reverse_mapping = None, None
     if generate_mappings:
         forward_mapping, reverse_mapping = mapping_factory(
             model, resource_type, reverse_exclude_fields=reverse_exclude_fields
         )
+        if return_mappings:
+            return resource_type, forward_mapping, reverse_mapping
 
-    if return_mappings:
-        return resource_type, forward_mapping, reverse_mapping
-    else:
-        return resource_type
+    return resource_type
