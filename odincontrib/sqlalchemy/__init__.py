@@ -60,7 +60,19 @@ def field_factory(column):
             return field(**field_kwargs)
 
 
-def table_resource_factory(table, module=None, base_resource=odin.Resource, resource_mixins=None, exclude_fields=None,
+class ModelResource(odin.Resource):
+    """
+    Resource with some extra model specific fields.
+    """
+    def to_model(self):
+        """
+        Map this resource to corresponding model.
+        """
+        mapping = registration.get_mapping(self, self.__model__)
+        return mapping.apply(self)
+
+
+def table_resource_factory(table, module=None, base_resource=ModelResource, resource_mixins=None, exclude_fields=None,
                            generate_mappings=False, return_mappings=False, additional_fields=None,
                            resource_type_name=None, reverse_exclude_fields=None):
     """
