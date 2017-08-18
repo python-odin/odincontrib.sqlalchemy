@@ -1,11 +1,12 @@
 import pytest
+from datetime import datetime
 
 from sqlalchemy import Column, String, Text, Table, Integer, DateTime, MetaData
 from sqlalchemy.ext.declarative import declarative_base
 
 from odin import StringField, Resource, Mapping
 
-from odincontrib.sqlalchemy import field_factory, table_resource_factory, register_model_base
+from odincontrib.sqlalchemy import field_factory, table_resource_factory, register_model_base, ModelResource
 
 Base = declarative_base()
 register_model_base(Base)
@@ -22,7 +23,7 @@ def test_field_factory(column, expected, expected_attrs):
 
 
 test_table = Table(
-    'ModelTest', MetaData(),
+    'ModelATest', MetaData(),
     Column(Integer, name='id', primary_key=True),
     Column(String(256), name='name'),
     Column(DateTime(), name='created'),
@@ -30,7 +31,7 @@ test_table = Table(
 
 
 class ModelTest(Base):
-    __tablename__ = 'ModelTest'
+    __tablename__ = 'ModelBTest'
 
     id = Column(Integer, primary_key=True)
     name = Column(String(256))
@@ -41,19 +42,19 @@ class TestTableResourceFactory(object):
     def test_from_table(self):
         actual = table_resource_factory(test_table)
 
-        assert issubclass(actual, Resource)
-        assert actual.__name__ == 'ModelTest'
+        assert issubclass(actual, ModelResource)
+        assert actual.__name__ == 'ModelATest'
 
     def test_from_declarative(self):
         actual = table_resource_factory(ModelTest)
 
-        assert issubclass(actual, Resource)
-        assert actual.__name__ == 'ModelTest'
+        assert issubclass(actual, ModelResource)
+        assert actual.__name__ == 'ModelBTest'
 
     def test_get_mappings(self):
         actual, actual_from, actual_to = table_resource_factory(ModelTest, return_mappings=True)
 
-        assert issubclass(actual, Resource)
+        assert issubclass(actual, ModelResource)
         assert issubclass(actual_from, Mapping)
         assert issubclass(actual_to, Mapping)
 
@@ -69,3 +70,15 @@ class TestTableResourceFactory(object):
     def test_wrong_args(self):
         with pytest.raises(ValueError):
             table_resource_factory(test_table, return_mappings=True)
+
+    def test_to_model(self):
+        Resource = table_resource_factory(ModelTest)
+
+        target = Resource(id=1, name='Foo', created=datetime(2020, 10, 10))
+
+        actual = target.to_model()
+
+        assert isinstance(actual, ModelTest)
+        assert actual.id == 1
+        assert actual.name == 'Foo'
+        assert actual.created == datetime(2020, 10, 10)

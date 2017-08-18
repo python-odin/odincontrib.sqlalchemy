@@ -1,13 +1,13 @@
 import inspect
-
-import sys
-
 import odin
-from sqlalchemy import types as sql_types, Column, Table
 
 from odin import registration
 from odin import fields
 from odin.mapping import FieldResolverBase, mapping_factory
+from sqlalchemy import types as sql_types, Column, Table
+
+# Typing imports
+from typing import TypeVar, Union, Any, List, Type, Tuple  # noqa
 
 
 class SqlAlchemyFieldResolver(FieldResolverBase):
@@ -68,13 +68,17 @@ class ModelResource(odin.Resource):
         """
         Map this resource to corresponding model.
         """
-        mapping = registration.get_mapping(self, self.__model__)
+        mapping = registration.get_mapping(self.__class__, self.__model__)
         return mapping.apply(self)
+
+
+T = TypeVar('T')
 
 
 def table_resource_factory(table, module=None, base_resource=ModelResource, resource_mixins=None, exclude_fields=None,
                            generate_mappings=False, return_mappings=False, additional_fields=None,
                            resource_type_name=None, reverse_exclude_fields=None):
+    # type: (Any, Union[str, module], T, List[Any], List[str], bool, bool, List[str], str, List[str]) -> Union[T, Tuple[T, Any, Any]]
     """
 
     :param table:
@@ -135,7 +139,7 @@ def table_resource_factory(table, module=None, base_resource=ModelResource, reso
         attrs.update(additional_fields)
 
     # Create
-    resource_type = type(resource_type_name, bases, attrs)
+    resource_type = type(resource_type_name, bases, attrs)  # type: T
 
     # Generate mappings
     if generate_mappings:
