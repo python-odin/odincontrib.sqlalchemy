@@ -1,10 +1,9 @@
 import pytest
-from datetime import datetime
 
+from datetime import datetime
+from odin import StringField, Mapping
 from sqlalchemy import Column, String, Text, Table, Integer, DateTime, MetaData
 from sqlalchemy.ext.declarative import declarative_base
-
-from odin import StringField, Resource, Mapping
 
 from odincontrib.sqlalchemy import field_factory, table_resource_factory, register_model_base, ModelResource
 
@@ -13,13 +12,16 @@ register_model_base(Base)
 
 
 @pytest.mark.parametrize('column, expected, expected_attrs', (
-    (Column(String), StringField, {}),
-    (Column(String(256)), StringField, {}),
-    (Column(Text), StringField, {}),
+    (Column(String, primary_key=True), StringField, dict(key=True, null=False)),
+    (Column(String(256), nullable=True), StringField, dict(null=True, max_length=256)),
+    (Column(Text), StringField, dict(null=True)),
 ))
 def test_field_factory(column, expected, expected_attrs):
     actual = field_factory(column)
+
     assert isinstance(actual, expected)
+    for attr, value in expected_attrs.items():
+        assert getattr(actual, attr) == value
 
 
 test_table = Table(
