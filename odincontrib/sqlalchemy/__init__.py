@@ -1,13 +1,22 @@
 import inspect
 import odin
 
-from odin import registration
-from odin import fields
+from odin import registration, Mapping
+from odin.fields import BaseField
 from odin.mapping import FieldResolverBase, mapping_factory
+from odin.resources import ResourceBase
 from sqlalchemy import types as sql_types, Column, Table
 
 # Typing imports
-from typing import TypeVar, Union, Any, List, Type, Tuple  # noqa
+from typing import Union, Any, Type, Tuple, Sequence  # noqa
+
+try:
+    from odin.fields import future
+except ImportError:
+    future = None
+
+
+ResourceType = Type[ResourceBase]
 
 
 class SqlAlchemyFieldResolver(FieldResolverBase):
@@ -34,16 +43,23 @@ BASE_ATTR_MAP = {
 
 }
 
-SQL_TYPE_MAP = [
-    (sql_types.String, fields.StringField, {}),
-    (sql_types.Integer, fields.IntegerField, {}),
-    (sql_types.Numeric, fields.FloatField, {}),
-    (sql_types.Boolean, fields.BooleanField, {}),
-    (sql_types.Date, fields.DateField, {}),
-    (sql_types.Time, fields.TimeField, {}),
-    (sql_types.DateTime, fields.DateTimeField, {}),
-    (sql_types.Enum, fields.StringField, {}),
-]
+SQL_TYPE_MAP = {
+    sql_types.String: (odin.StringField, {
+        'max_length': (None, 'length')
+    }),
+    sql_types.Text: (odin.StringField, {}),
+    sql_types.Integer: (odin.IntegerField, {}),
+    sql_types.Numeric: (odin.FloatField, {}),
+    sql_types.Boolean: (odin.BooleanField, {}),
+    sql_types.Date: (odin.DateField, {}),
+    sql_types.Time: (odin.TimeField, {}),
+    sql_types.DateTime: (odin.DateTimeField, {}),
+}
+
+if future:
+    SQL_TYPE_MAP.update({
+        sql_types.Enum: (future.EnumField, {}),
+    })
 
 
 def field_factory(column):
@@ -51,13 +67,24 @@ def field_factory(column):
     """
     Generate an equivalent resource field from a SQLAlchemy column definition.
     """
-    for sql_type, field, attrs in SQL_TYPE_MAP:
-        if isinstance(column.type, sql_type):
-            field_kwargs = {
-                'null': column.nullable,
-                'key': column.primary_key,
-            }
-            return field(**field_kwargs)
+    col_type = column.type
+    mapping = SQL_TYPE_MAP.get(col_type.__class__, None)
+    if mapping:
+        field, attr_map = mapping
+        field_kwargs = {
+            'null': column.nullable,
+            'key': column.primary_key,
+        }
+
+        # Map attributes
+        for dest, (transform, source) in attr_map.items():
+            value = getattr(col_type, source, None)
+            if value:
+                if transform:
+                    value = transform(value, col_type)
+                field_kwargs[dest] = value
+
+        return field(**field_kwargs)
 
 
 class ModelResource(odin.Resource):
@@ -72,26 +99,25 @@ class ModelResource(odin.Resource):
         return mapping.apply(self)
 
 
-T = TypeVar('T')
-
-
 def table_resource_factory(table, module=None, base_resource=ModelResource, resource_mixins=None, exclude_fields=None,
                            generate_mappings=False, return_mappings=False, additional_fields=None,
                            resource_type_name=None, reverse_exclude_fields=None):
-    # type: (Any, Union[str, module], T, List[Any], List[str], bool, bool, List[str], str, List[str]) -> Union[T, Tuple[T, Any, Any]]
+    # type: (Any, Union[str, module], ResourceType, Sequence[ResourceType], Sequence[str], bool, bool, Sequence[BaseField], str, Sequence[str]) -> Union[ResourceType, Tuple[ResourceType, Mapping, Mapping]]
     """
+    Generate an Odin Resource from a SQLAlchemy Table.
 
-    :param table:
-    :param module:
-    :param base_resource:
-    :param resource_mixins:
-    :param exclude_fields:
+    :param table: SQLAlchemy Table or Declarative object
+    :param module: Module name of table (this is estimated if not provided)
+    :param base_resource: Resource to use as a base class
+    :param resource_mixins: Any mixins to apply in the resource tree.
+    :param exclude_fields: List of field names to exclude
     :param generate_mappings:
     :param return_mappings:
     :param additional_fields:
     :param resource_type_name:
     :param reverse_exclude_fields:
     :return:
+
     """
     model = None
     if not isinstance(table, Table):
@@ -139,7 +165,7 @@ def table_resource_factory(table, module=None, base_resource=ModelResource, reso
         attrs.update(additional_fields)
 
     # Create
-    resource_type = type(resource_type_name, bases, attrs)  # type: T
+    resource_type = type(resource_type_name, bases, attrs)  # type: ResourceType
 
     # Generate mappings
     if generate_mappings:
