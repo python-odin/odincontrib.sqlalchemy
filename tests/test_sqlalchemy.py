@@ -2,6 +2,8 @@ import pytest
 
 from datetime import datetime
 from odin import StringField, Mapping
+from odin.utils import getmeta
+from odin.registration import cache
 from sqlalchemy import Column, String, Text, Table, Integer, DateTime, MetaData
 from sqlalchemy.ext.declarative import declarative_base
 
@@ -41,6 +43,17 @@ class ModelTest(Base):
 
 
 class TestTableResourceFactory(object):
+    @pytest.fixture(autouse=True)
+    def clear_resources(self):
+        """
+        Ensure a cached version of a resource is not re-used.
+        """
+        cache.resources.clear()
+        cache.mappings.clear()
+        yield
+        cache.resources.clear()
+        cache.mappings.clear()
+
     def test_from_table(self):
         actual = table_resource_factory(test_table)
 
@@ -48,22 +61,29 @@ class TestTableResourceFactory(object):
         assert actual.__name__ == 'ModelATest'
 
     def test_from_declarative(self):
-        actual = table_resource_factory(ModelTest)
+        actual = table_resource_factory(ModelTest, module='tests')
 
         assert issubclass(actual, ModelResource)
-        assert actual.__name__ == 'ModelBTest'
+        assert actual.__name__ == 'ModelTest'
 
     def test_get_mappings(self):
-        actual, actual_from, actual_to = table_resource_factory(ModelTest, return_mappings=True)
+        actual, actual_from, actual_to = table_resource_factory(ModelTest, module='tests', return_mappings=True)
 
         assert issubclass(actual, ModelResource)
         assert issubclass(actual_from, Mapping)
         assert issubclass(actual_to, Mapping)
 
     def test_exclude_fields(self):
-        actual = table_resource_factory(ModelTest, exclude_fields='name')
+        actual = table_resource_factory(ModelTest, module='tests', exclude_fields='name')
 
         assert not hasattr(actual, 'name')
+
+    def test_additional_fields(self):
+        actual = table_resource_factory(ModelTest, module='tests', additional_fields={
+            'foo': StringField(),
+        })
+
+        assert 'foo' in getmeta(actual).field_map
 
     def test_not_a_table(self):
         with pytest.raises(TypeError):
@@ -74,9 +94,10 @@ class TestTableResourceFactory(object):
             table_resource_factory(test_table, return_mappings=True)
 
     def test_to_model(self):
-        Resource = table_resource_factory(ModelTest)
+        resource = table_resource_factory(ModelTest, resource_type_name="ResourceTest",
+                                          generate_mappings=True)
 
-        target = Resource(id=1, name='Foo', created=datetime(2020, 10, 10))
+        target = resource(id=1, name='Foo', created=datetime(2020, 10, 10))
 
         actual = target.to_model()
 
