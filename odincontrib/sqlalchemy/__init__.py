@@ -1,7 +1,7 @@
 import inspect
 import odin
 
-from odin import registration, Mapping
+from odin import registration, Mapping, NotProvided
 from odin.fields.base import BaseField
 from odin.mapping import FieldResolverBase, mapping_factory
 from odin.resources import ResourceBase
@@ -42,12 +42,27 @@ def register_model_base(base):
     registration.register_field_resolver(SqlAlchemyFieldResolver, base)
 
 
+def column_attr(attr, default=None):
+    """Get value from Column instance"""
+    def transform(column):
+        return getattr(column, attr, default)
+    return transform
+
+
+def type_attr(attr, default=None):
+    """Get value from Column type instance"""
+    def transform(column):
+        return getattr(column.type, attr, default)
+    return transform
+
+
 SQL_TYPE_MAP = {
     sql_types.String: (odin.StringField, {
-        'max_length': (None, 'length'),
+        'max_length': type_attr('length'),
     }),
     sql_types.Text: (odin.StringField, {}),
     sql_types.Integer: (odin.IntegerField, {}),
+    sql_types.Float: (odin.FloatField, {}),
     sql_types.Numeric: (odin.FloatField, {}),
     sql_types.Boolean: (odin.BooleanField, {}),
     sql_types.Date: (odin.DateField, {}),
@@ -58,7 +73,7 @@ SQL_TYPE_MAP = {
 if future:
     SQL_TYPE_MAP[sql_types.Enum] = (
         future.EnumField, {
-            'enum': (None, 'enum_class'),
+            'enum': type_attr('enum_class'),
         }
     )
 
@@ -71,19 +86,20 @@ def field_factory(column):
     col_type = column.type
     mapping = SQL_TYPE_MAP.get(col_type.__class__, None)
     if mapping:
-        field, attr_map = mapping
-        field_kwargs = {
-            'null': column.nullable,
-            'key': column.primary_key,
+        field, field_attr_map = mapping
+
+        attr_map = {
+            'null': column_attr('nullable'),
+            'key': column_attr('primary_key', False),
+            'default': lambda c: c.default.arg if c.default else NotProvided,
+            'doc_text': column_attr('doc'),
         }
+        attr_map.update(field_attr_map)
 
         # Map attributes
-        for dest, (transform, source) in attr_map.items():
-            value = getattr(col_type, source, None)
-            if value:
-                if transform:
-                    value = transform(value, col_type)
-                field_kwargs[dest] = value
+        field_kwargs = {}
+        for dest, transform in attr_map.items():
+            field_kwargs[dest] = transform(column)
 
         return field(**field_kwargs)
 

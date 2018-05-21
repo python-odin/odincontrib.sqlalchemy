@@ -1,23 +1,45 @@
 import pytest
 
 from datetime import datetime
-from odin import StringField, Mapping
+from odin import StringField, IntegerField, Mapping, NotProvided
 from odin.utils import getmeta
 from odin.registration import cache
-from sqlalchemy import Column, String, Text, Table, Integer, DateTime, MetaData
+from sqlalchemy import Column, String, Text, Table, Integer, DateTime, MetaData, Enum
 from sqlalchemy.ext.declarative import declarative_base
 
-from odincontrib.sqlalchemy import field_factory, table_resource_factory, register_model_base, ModelResource
+from odincontrib.sqlalchemy import field_factory, table_resource_factory, register_model_base, ModelResource, future
+
+try:
+    import enum
+    from odin import EnumField
+except ImportError:
+    pass
 
 Base = declarative_base()
 register_model_base(Base)
 
 
-@pytest.mark.parametrize('column, expected, expected_attrs', (
-    (Column(String, primary_key=True), StringField, dict(key=True, null=False)),
-    (Column(String(256), nullable=True), StringField, dict(null=True, max_length=256)),
-    (Column(Text), StringField, dict(null=True)),
-))
+def test_register_model_base__invalid_base():
+    with pytest.raises(TypeError):
+        register_model_base(object())
+
+
+field_factory_args = [
+    (Column(String, primary_key=True, doc="foo"), StringField, dict(key=True, null=False, doc_text="foo")),
+    (Column(String(256), nullable=False, default="bar"), StringField, dict(null=False, max_length=256, default="bar")),
+    (Column(Text), StringField, dict(null=True, doc_text="", default=NotProvided)),
+    (Column(Integer), IntegerField, dict(null=True, doc_text="", default=NotProvided)),
+]
+if future:
+    class MyEnum(enum.Enum):
+        Foo = 'foo'
+        Bar = 'bar'
+        Eek = 'eek'
+
+    field_factory_args.append((Column(Enum(MyEnum)), EnumField, dict(enum=MyEnum)))
+
+
+@pytest.mark.parametrize('column, expected, expected_attrs', field_factory_args)
 def test_field_factory(column, expected, expected_attrs):
     actual = field_factory(column)
 
